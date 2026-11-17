@@ -12,7 +12,8 @@
   G. 배송·수행료(#149·#152)   주문번호 찾기(없는 번호 빈 목록), 추가 배달료 대기·조정 대기 200, 직원 근거 사진(#157)·상태 정정(#150) 없는 배송 404
   H. 정리                    운행 종료 → 탈퇴(배송이 없어 바로 COMPLETED) — LAN 에 시험 라이더를 남기지 않는다
 
-실행: uv run --no-project --with cryptography python -I deploy/lan/checks/rider_backoffice_e2e.py
+실행: uv run --no-project --with cryptography python -I deploy/lan/checks/rider_backoffice_e2e.py [--sup]
+  --sup: 센터 관리자(claude-mfc-sup) 403 확인까지 — PC 1 이 준 최신 비밀번호 파일이 있을 때만(옛 값이면 계정이 잠겨 다른 PC 도 막힘)
 필요: rider_e2e.py 와 같다(라이더 서명키·claude-dev 비밀번호) + keycloak-claude-mfc-sup-password.
 2026-11-18 처음 작성(PC 5 — 라이더 백오피스 백엔드 #149~#158 확인용).
 """
@@ -45,12 +46,16 @@ def first(items, key, value):
 def main():
     admin = staff_token("claude-dev")
     admin = admin[0] if isinstance(admin, tuple) else admin
-    try:  # 센터 관리자 시험 계정 — 비밀번호 파일이 바뀌었으면 403 확인만 건너뛴다
+    # 센터 관리자 시험 계정은 --sup 일 때만(2026-11-18 PC 1 요청): 옛 비밀번호로 5번 실패하면 Keycloak 이 계정을 잠가
+    # 다른 PC 도 막히고, 비밀번호 파일이 없으면 staff_auth 가 비밀번호를 새로 바꿔 모든 PC 파일이 무효가 된다.
+    sup = None
+    if "--sup" in sys.argv:
+        if not os.path.exists(os.path.join(HERE, "..", ".secrets", "keycloak-claude-mfc-sup-password")):
+            sys.exit("--sup: keycloak-claude-mfc-sup-password 파일이 없음 — PC 1 에서 받은 뒤 다시(파일 없이 돌리면 비밀번호가 바뀜)")
         sup = staff_token("claude-mfc-sup", ["MFC_SUPERVISOR"], [MFC])
         sup = sup[0] if isinstance(sup, tuple) else sup
-    except SystemExit as e:
-        print(f"  --   센터 관리자 계정 로그인 실패 — 403 확인 건너뜀({e})")
-        sup = None
+    else:
+        print("  --   센터 관리자 403 확인 건너뜀(--sup 로 켬 — PC 1 에서 받은 비밀번호 파일이 있을 때만)")
 
     # A. 대시보드
     s, st = http("GET", "/riders/stats", admin)
