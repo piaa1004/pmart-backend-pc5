@@ -3,7 +3,7 @@
 보낸 영역: delivery
 - 작성: pmart-backend PC 5(delivery), 2026-11-17 — 사용자 "실제 주문이면 완벽하게 돌아가는지, 빠진 것" 점검 결과
 - 대상: pmart-clients `apps/rider_app`(브랜치 `rider-app/reference-ui` 기준으로 읽음)
-- 상태: 서버는 아래 "배포" 표시까지 LAN 에 있다. 2026-11-17 저녁 앱 작업 사본(미커밋)을 다시 읽어 보니 **로그인·번호 확인·은행 코드·약관 버전(`termsVersion 2026-11-17`)·운행시간·탈퇴·전달 재개는 이미 실서버로 붙이는 중**이다. 남은 것은 아래 ⬜ 표시 — 특히 **고객 반품 회수 화면**(받음·반납)이 앱에 없다.
+- 상태: 서버는 아래 "배포" 표시까지 LAN 에 있다. 2026-11-17 저녁 앱 작업 사본(미커밋)을 다시 읽어 보니 **로그인·번호 확인·은행 코드·약관 버전(`termsVersion 2026-11-17`)·운행시간·탈퇴·전달 재개는 이미 실서버로 붙이는 중**이다. 남은 것은 아래 ⬜ 표시 — 특히 **회수 배송 단계**(받음 → MFC 반납 — 반품·오배송 공통 한 벌)가 앱에 없다.
 
 ## 1. 로그인·가입(이것이 없으면 아무 것도 못 한다)
 | 할 것 | 서버(상태) | 근거 |
@@ -28,9 +28,9 @@
 | 할 것 | 서버(상태) |
 |---|---|
 | 배송 조회 `orderSummary`(orderNumber 포함)·`orderNumber`·`mfcName` | 배포 |
-| 전달지 `drop-info` — 일반은 픽업 뒤, **반품 회수는 배정부터(고객 집)** | 배포 |
-| 오배송 회수: `recovery-contact`(전화만)·원래 완료 사진 | 배포 |
-| ⬜ **고객 반품 회수 화면**(앱에 없음): 받음 `returns/pickups`(사진) → 반납 `returns/store-deliveries`, 받을 품목 `returnLines`, 받기 전 실패는 `failures` — `2026-11-17-request-claim-return-pickup.md` | 배포 |
+| 전달지 `drop-info` — 일반 배송, 픽업 뒤(회수 배송은 `recovery-contact`) | 배포 |
+| 오배송 회수의 원래 완료 사진(`recoveryOrigin`) | 배포 |
+| ⬜ **회수 배송 단계 한 벌**(앱에 없음 — 반품 회수·오배송 회수 공통, purpose 로 문구만): 회수지 `recovery-contact`(주소는 있을 때만) → 받음 `returns/pickups`(사진) → 반납 `returns/store-deliveries` — `2026-11-17-request-claim-return-pickup.md` | 배포(연락처 통합은 PR #137) |
 | **전달 불가**: `POST …/failures` 한 번이면 대화도 열림(응답 `resultId`) — **도움요청을 따로 보내지 않기**. 재개 `POST …/failures/resume-requests` | PR #127 |
 | 연락 기록 method 에 `PHONE_CALL`·`SMS`(일반 전화) | 배포 |
 
