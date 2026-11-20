@@ -43,7 +43,8 @@ public class FulfillmentEventHandler {
           "ShipmentReady",
           "PackingFinished",
           "WorkStopResult",
-          "PackageHandedOver");
+          "PackageHandedOver",
+          "PackageInvalidated");
 
   private static final Logger log = LoggerFactory.getLogger(FulfillmentEventHandler.class);
   private static final Set<String> CLOSED =
@@ -98,7 +99,7 @@ public class FulfillmentEventHandler {
               null,
               null,
               instant(p.path("readyAt")),
-              packages(p.path("packages")),
+              packages(p.path("packages"), p.path("shipmentId").asString()),
               p.path("deliveryMode").asString(null),
               false,
               reshipmentCase,
@@ -108,10 +109,13 @@ public class FulfillmentEventHandler {
         store
             .lockByShipment(shipmentId)
             .ifPresent(
-                d -> store.updatePackages(d.deliveryId(), packages(p.path("packages")), now));
+                d ->
+                    store.updatePackages(
+                        d.deliveryId(), packages(p.path("packages"), shipmentId), now));
       }
       case "WorkStopResult" -> onStop(p, now);
       case "PackageHandedOver" -> onHandover(p, now);
+      case "PackageInvalidated" -> onInvalidated(p, now);
       default -> {}
     }
   }
@@ -296,8 +300,81 @@ public class FulfillmentEventHandler {
             });
   }
 
-  /** 포장 목록 — 라이더 표시·과적 판단에 필요한 칸만(내용물 줄은 저장하지 않는다). */
-  private String packages(JsonNode arr) {
+  /**
+   * 재포장 무효(2026-11-20 — MFC 시뮬레이터 R-28, 주문 23631583): 옛 포장을 새 포장으로 바꾸고 픽업을 다시 판정한다. 처리하지 않던 때는 옛
+   * 포장이 목록에 남아 새 포장을 인계해도 PICKED_UP 이 되지 않았다(배차 취소도 422). 무효가 목록보다 먼저 오면 기록만 — 목록이 올 때 바꾼다.
+   */
+  private void onInvalidated(JsonNode p, Instant now) {
+    String packageId = p.path("packageId").asString("");
+    if (packageId.isBlank()) {
+      return;
+    }
+    List<String> next = new ArrayList<>();
+    p.path("newPackageIds").forEach(n -> next.add(n.asString()));
+    if (next.isEmpty() && !p.path("newPackageId").asString("").isBlank()) {
+      next.add(p.path("newPackageId").asString());
+    }
+    String shipmentId = p.path("shipmentId").asString(null);
+    store.invalidatePackage(packageId, shipmentId, mapper.writeValueAsString(next), now);
+    if (shipmentId == null || shipmentId.isBlank()) {
+      return;
+    }
+    store
+        .lockByShipment(shipmentId)
+        .filter(d -> d.packagesJson() != null)
+        .ifPresent(
+            d -> {
+              String replaced = applyInvalidations(d.packagesJson(), shipmentId);
+              store.updatePackages(d.deliveryId(), replaced, now);
+              recheckPickup(d.deliveryId(), now);
+              log.info("배송 {} 포장 {} 무효(재포장) → 새 포장 {}개", d.deliveryId(), packageId, next.size());
+            });
+  }
+
+  /** 포장 목록에서 무효 포장을 새 포장으로(연쇄 재포장도 끝까지, 고리 막음). 새 포장은 옛 포장의 봉지 수·무게·주류 표시를 물려받는다. */
+  String applyInvalidations(String packagesJson, @Nullable String shipmentId) {
+    List<Map<String, Object>> items = new ArrayList<>();
+    for (JsonNode n : mapper.readTree(packagesJson)) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      n.properties().forEach(en -> m.put(en.getKey(), en.getValue()));
+      m.put("packageId", n.path("packageId").asString());
+      items.add(m);
+    }
+    Map<String, String> inv =
+        store.invalidations(
+            shipmentId, items.stream().map(m -> String.valueOf(m.get("packageId"))).toList());
+    if (inv.isEmpty()) {
+      return packagesJson;
+    }
+    List<Map<String, Object>> out = new ArrayList<>();
+    Set<String> seen = new java.util.HashSet<>();
+    java.util.ArrayDeque<Map<String, Object>> todo = new java.util.ArrayDeque<>(items);
+    while (!todo.isEmpty()) {
+      Map<String, Object> m = todo.pollFirst();
+      String id = String.valueOf(m.get("packageId"));
+      if (!seen.add(id)) {
+        continue;
+      }
+      String next = inv.get(id);
+      if (next == null) {
+        out.add(m);
+        continue;
+      }
+      List<Map<String, Object>> repl = new ArrayList<>();
+      for (JsonNode n : mapper.readTree(next)) {
+        Map<String, Object> copy = new LinkedHashMap<>(m);
+        copy.put("packageId", n.asString());
+        repl.add(copy);
+      }
+      for (int i = repl.size() - 1; i >= 0; i--) {
+        todo.addFirst(repl.get(i));
+      }
+    }
+    return mapper.writeValueAsString(out);
+  }
+
+  /** 포장 목록 — 라이더 표시·과적 판단에 필요한 칸만(내용물 줄은 저장하지 않는다). 이미 무효된 포장은 새 포장으로. */
+  private String packages(JsonNode arr, @Nullable String shipmentId) {
     List<Map<String, Object>> out = new ArrayList<>();
     for (JsonNode n : arr) {
       Map<String, Object> m = new LinkedHashMap<>();
@@ -309,7 +386,7 @@ public class FulfillmentEventHandler {
       m.put("alcohol", n.path("alcohol").asBoolean(false));
       out.add(m);
     }
-    return mapper.writeValueAsString(out);
+    return applyInvalidations(mapper.writeValueAsString(out), shipmentId);
   }
 
   List<String> packageIds(String packagesJson) {

@@ -81,3 +81,4 @@
 - **배정 사건 묶음 순서(2026-11-19, DE-6)**: DeliveryAssigned 에 bundleId·stopSequence(묶음 배정일 때).
 
 - **DD-4 정시 배송률(2026-11-19, 0.13.0·V15)**: `GET /metrics/on-time-deliveries?from&to&mfcId`(`OnTimeMetrics`) — 약속 끝(promised_at) KST 날짜·센터별 onTime·late(약속 지났는데 정시 아님 — 전달 전·실패 포함)·unjudged(CUSTOMER_CONFIRMED·AUTO_COMPLETED — `completion_method` 사본)·pending, due = onTime + late. FORWARD·RESHIPMENT, 주문 취소 제외. OPERATOR_ADMIN 모든 센터, 그 밖 mfcId.
+- **재포장 무효 포장(2026-11-20, V16 — MFC 시뮬레이터 R-28·주문 23631583)**: `fulfillmentEvents` 에 `PackageInvalidated` — `invalidated_package` 에 남기고 그 출고 배송의 `packages` 를 새 포장으로 바꾼 뒤(`applyInvalidations` — 연쇄 재포장 끝까지, 새 포장은 옛 포장의 봉지 수·무게·주류 표시 물려받음) 픽업 다시 판정(`recheckPickup`). ShipmentReady·PackingFinished 로 목록이 올 때도 이미 받은 무효를 적용(무효가 먼저 와도 됨). 전에는 처리하지 않아 옛 포장이 남아 새 포장 인계로 PICKED_UP 이 안 되고 배차 취소 422.

@@ -201,6 +201,33 @@ public class DispatchStore {
         deliveryId);
   }
 
+  /** 재포장으로 무효된 포장(PackageInvalidated, 2026-11-20). 같은 포장은 한 번. */
+  public void invalidatePackage(
+      String packageId, @Nullable String shipmentId, String newPackageIdsJson, Instant now) {
+    jdbc.update(
+        "INSERT INTO invalidated_package (package_id, shipment_id, new_package_ids, recorded_at)"
+            + " VALUES (?, ?, ?::jsonb, ?) ON CONFLICT (package_id) DO NOTHING",
+        packageId,
+        shipmentId,
+        newPackageIdsJson,
+        ts(now));
+  }
+
+  /** 무효 포장 → 새 포장 ID 목록(JSON). 그 출고 것과, 주어진 포장 ID 것. */
+  public java.util.Map<String, String> invalidations(
+      @Nullable String shipmentId, java.util.Collection<String> packageIds) {
+    java.util.Map<String, String> out = new java.util.HashMap<>();
+    jdbc.query(
+        "SELECT package_id, new_package_ids::text FROM invalidated_package WHERE shipment_id = ?"
+            + " OR package_id = ANY (?)",
+        rs -> {
+          out.put(rs.getString(1), rs.getString(2));
+        },
+        shipmentId,
+        packageIds.toArray(String[]::new));
+    return out;
+  }
+
   public Optional<DeliveryRow> lockByShipment(String shipmentId) {
     return first(
         "SELECT * FROM delivery WHERE shipment_id = ? FOR UPDATE",

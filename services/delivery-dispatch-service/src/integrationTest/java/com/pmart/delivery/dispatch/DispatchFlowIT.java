@@ -1596,6 +1596,124 @@ class DispatchFlowIT extends PostgresKafkaContainerSupport {
         .isZero();
   }
 
+  /**
+   * 재포장 무효(2026-11-20 — R-28, 주문 23631583): 목록의 옛 포장이 무효(PackageInvalidated)되면 새 포장으로 바뀌고, 새 포장 인계로
+   * PICKED_UP. 인계가 무효 사건보다 먼저 와도 무효를 받을 때 다시 판정한다.
+   */
+  @Test
+  void invalidatedPackageIsReplacedForPickup() {
+    String mfc = "MFC-D28";
+    String rider = "RD-r28-" + UUID.randomUUID();
+    riders(mfc, rider(rider, "AI_RECOMMENDED", true));
+    riderLookup(rider(rider, "AI_RECOMMENDED", true));
+    locations(Map.of(rider, new double[] {37.4985, 127.0280}));
+    String order = "ORD-" + UUID.randomUUID();
+    String shipment = "SHP-" + UUID.randomUUID();
+    send(
+        "DispatchRequested",
+        shipment,
+        Map.of(
+            "orderId",
+            order,
+            "shipmentId",
+            shipment,
+            "mfcId",
+            mfc,
+            "trigger",
+            "MANUAL",
+            "estimatedPackMinutes",
+            5,
+            "estimatedReadyAt",
+            Instant.now().toString(),
+            "requestedAt",
+            Instant.now().toString()));
+    String deliveryId = awaitDelivery(shipment);
+    engine.tick();
+    String offer =
+        jdbc.queryForObject(
+            "SELECT offer_id FROM dispatch_offer WHERE delivery_id = ? AND state = 'SENT'",
+            String.class,
+            deliveryId);
+    assertThat(body(respond(rider, offer, "a-" + offer, "ACCEPT")).path("outcome").asString())
+        .isEqualTo("ASSIGNED");
+    String oldPkg = "P-OLD-" + shipment;
+    String newPkg = "P-NEW-" + shipment;
+    send(
+        "ShipmentReady",
+        shipment,
+        Map.of(
+            "orderId",
+            order,
+            "shipmentId",
+            shipment,
+            "mfcId",
+            mfc,
+            "readyAt",
+            Instant.now().toString(),
+            "packages",
+            List.of(Map.of("packageId", oldPkg, "bagCount", 2))));
+    awaitSql(
+        "SELECT count(*) FROM delivery WHERE delivery_id = '"
+            + deliveryId
+            + "' AND ready_at IS NOT NULL");
+    send(
+        "PackageHandedOver",
+        newPkg,
+        Map.of(
+            "orderId",
+            order,
+            "shipmentId",
+            shipment,
+            "deliveryId",
+            deliveryId,
+            "packageId",
+            newPkg,
+            "riderId",
+            rider,
+            "handoverId",
+            "HO-NEW",
+            "inventoryCommitId",
+            "IC-NEW",
+            "lines",
+            List.of(),
+            "handedAt",
+            Instant.now().toString()));
+    awaitSql(
+        "SELECT count(*) FROM delivery WHERE delivery_id = '"
+            + deliveryId
+            + "' AND handed_over_packages::text LIKE '%P-NEW-%'");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT state FROM delivery WHERE delivery_id = ?", String.class, deliveryId))
+        .isEqualTo("ASSIGNED"); // 옛 포장이 목록에 남아 있음
+    send(
+        "PackageInvalidated",
+        oldPkg,
+        Map.of(
+            "packageId",
+            oldPkg,
+            "newPackageId",
+            newPkg,
+            "shipmentId",
+            shipment,
+            "orderId",
+            order,
+            "mfcId",
+            mfc,
+            "reason",
+            "REPACK",
+            "invalidatedAt",
+            Instant.now().toString()));
+    awaitSql(
+        "SELECT count(*) FROM delivery WHERE delivery_id = '"
+            + deliveryId
+            + "' AND state = 'PICKED_UP'");
+    String pkgs =
+        jdbc.queryForObject(
+            "SELECT packages::text FROM delivery WHERE delivery_id = ?", String.class, deliveryId);
+    assertThat(pkgs).contains(newPkg).doesNotContain(oldPkg).contains("\"bagCount\": 2");
+  }
+
   @Test
   void handoverBeforePackageListDoesNotMarkPickedUpUntilListArrives() {
     String mfc = "MFC-D10";
@@ -3216,7 +3334,7 @@ class DispatchFlowIT extends PostgresKafkaContainerSupport {
   void send(String type, String key, Map<String, Object> payload) {
     String aggregateType =
         switch (type) {
-          case "PackageHandedOver" -> "Package";
+          case "PackageHandedOver", "PackageInvalidated" -> "Package";
           case "WorkStopResult" -> "Fulfillment";
           default -> "Shipment";
         };
