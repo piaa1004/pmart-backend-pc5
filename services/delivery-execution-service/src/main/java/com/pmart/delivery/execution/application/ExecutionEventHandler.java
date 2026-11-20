@@ -312,7 +312,7 @@ public class ExecutionEventHandler {
   }
 
   /**
-   * 다른 라이더 반납이 원래 라이더에게 넘어감(2026-11-20 — dispatch 가 30분 못 구하면 원래 라이더에게 바로, 사용자 "가"): 원래 배송 실패 기록의
+   * 다른 라이더 반납이 원래 라이더에게 넘어감(2026-11-20 — dispatch 가 5분 못 구하면 원래 라이더에게 바로, 사용자 "가"): 원래 배송 실패 기록의
    * returnBy 를 SAME_RIDER 로 — 라이더 앱이 "다른 라이더에게 넘겨 주세요" 대신 반납 배송을 연다. 실패 기록에 바뀐 시각을 남긴다.
    */
   private void sameRiderReturn(DeliveryRow d, String riderId, Instant now) {

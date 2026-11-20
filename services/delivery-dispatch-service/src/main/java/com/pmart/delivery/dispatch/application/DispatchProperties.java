@@ -97,7 +97,7 @@ public record DispatchProperties(
         listDelayPerCancellation == null ? Duration.ofMinutes(1) : listDelayPerCancellation;
     bundleNeighbors = bundleNeighbors == null ? 4 : bundleNeighbors;
     failedReturnFallbackAfter =
-        failedReturnFallbackAfter == null ? Duration.ofMinutes(30) : failedReturnFallbackAfter;
+        failedReturnFallbackAfter == null ? Duration.ofMinutes(5) : failedReturnFallbackAfter;
     urls = urls == null ? new Urls(null, null, null, null, null) : urls;
   }
 

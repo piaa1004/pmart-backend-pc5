@@ -1607,7 +1607,7 @@ class ExecutionFlowIT extends PostgresKafkaContainerSupport {
   }
 
   /**
-   * 다른 라이더 반납을 못 구해 원래 라이더에게 넘어감(2026-11-20 사용자 "가" — dispatch 가 30분 뒤 원래 라이더에게 바로 배정): 반납 배송이 원래
+   * 다른 라이더 반납을 못 구해 원래 라이더에게 넘어감(2026-11-20 사용자 "가" — dispatch 가 5분 뒤 원래 라이더에게 바로 배정): 반납 배송이 원래
    * 라이더에게 배정되면 원래 배송 실패 기록의 returnBy 가 SAME_RIDER — 라이더 앱이 반납 배송으로 넘어가고, 받음 없이 바로 반납.
    */
   @Test

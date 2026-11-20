@@ -470,7 +470,7 @@ public class DispatchEngine {
         assignFailedReturn(r, now);
         continue;
       }
-      // 2026-11-20 사용자 "가": 다른 라이더 반납을 failedReturnFallbackAfter(30분) 동안 못 맡기면 상품을 든 원래 라이더에게 바로
+      // 2026-11-20 사용자 "가": 다른 라이더 반납을 failedReturnFallbackAfter(5분) 동안 못 맡기면 상품을 든 원래 라이더에게 바로
       if (d.failedReturnByOther()
           && !d.createdAt().plus(props.failedReturnFallbackAfter()).isAfter(now)) {
         Boolean switched = tx.execute(s -> store.switchFailedReturnToSameRider(d.deliveryId()));

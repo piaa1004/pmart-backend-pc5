@@ -2643,7 +2643,7 @@ class DispatchFlowIT extends PostgresKafkaContainerSupport {
                 back3))
         .isEqualTo(1);
 
-    // 다른 라이더 반납을 30분 동안 못 맡기면 원래 라이더에게 바로(2026-11-20 사용자 "가")
+    // 다른 라이더 반납을 5분 동안 못 맡기면 원래 라이더에게 바로(2026-11-20 사용자 "가" → "5분 안으로")
     String order4 = "ORD-" + UUID.randomUUID();
     bundledOrder(order4, "IT-ROAD-FR4-" + order4, 37.5006, 127.0360);
     String origin4 =
@@ -2681,7 +2681,7 @@ class DispatchFlowIT extends PostgresKafkaContainerSupport {
         jdbc.queryForObject(
             "SELECT delivery_id FROM delivery WHERE origin_delivery_id = ?", String.class, origin4);
     jdbc.update(
-        "UPDATE delivery SET created_at = now() - interval '31 minutes' WHERE delivery_id = ?",
+        "UPDATE delivery SET created_at = now() - interval '6 minutes' WHERE delivery_id = ?",
         back4);
     engine.tick();
     Map<String, Object> d4 =
